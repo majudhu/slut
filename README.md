@@ -32,6 +32,13 @@ This starts your app in development mode, rebuilding assets on file changes.
 
 If you've followed the setup instructions already, all you need to do is run this:
 
+Run either one command to set the session secret environment variable
+
+```sh
+flyctl secrets set SESSION_SECRET="$(openssl rand -base64 33)"
+flyctl secrets set SESSION_SECRET="$(head -c33 /dev/urandom | base64)"
+```
+
 ```sh
 npm run deploy
 ```

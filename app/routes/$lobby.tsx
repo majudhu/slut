@@ -82,6 +82,7 @@ export default function Index() {
   const [sluts, setSluts] = useState(user?.sluts);
 
   useEffect(() => {
+    setSluts(user?.sluts);
     if (user) {
       function handler(data: MessageEvent<string>) {
         if (data.data == "[]") {

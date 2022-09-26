@@ -128,7 +128,7 @@ export default function Index() {
     setSluts(user?.sluts);
     if (user) {
       function handler(data: MessageEvent<string>) {
-        if (data.data == "[]") {
+        if (data.data == "[]" && user?.lobby?.name != lobby) {
           navigate("/");
         } else {
           setSluts(JSON.parse(data.data));

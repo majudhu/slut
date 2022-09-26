@@ -7,6 +7,8 @@ import { createSession, getSession } from '~/utils/session.server';
 
 import type { ActionArgs, LoaderArgs } from "@remix-run/node";
 
+type Data = { lobby?: { name: string }; sluts?: string[] } | null;
+
 export async function loader({ params, request }: LoaderArgs) {
   const session = await getSession(request);
   const playerId = session.get("id");
@@ -22,13 +24,54 @@ export async function loader({ params, request }: LoaderArgs) {
       }),
     ]);
     if (player && lobby) {
-      return json({
-        ...player,
-        sluts: lobby?.players.map((p) => p.name),
+      if (request.headers.get("accept") != "text/event-stream") {
+        return json({
+          ...player,
+          sluts: lobby?.players
+            .filter((p) => p.id != playerId)
+            .map((p) => p.name),
+        } as Data);
+      }
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          async function send() {
+            const lobby = await db.lobby.findUnique({
+              where: { name: params.lobby },
+              include: { players: true },
+            });
+            controller.enqueue(
+              encoder.encode(
+                `event: message\ndata: ${JSON.stringify(
+                  lobby?.players
+                    .filter((p) => p.id != playerId)
+                    .map((p) => p.name) ?? []
+                )}\n\n`
+              )
+            );
+          }
+          let closed = false;
+          function close() {
+            if (closed) return;
+            closed = true;
+            emitter.removeListener(params.lobby as string, send);
+            request.signal.removeEventListener("abort", close);
+            controller.close();
+          }
+          request.signal.addEventListener("abort", close);
+          if (request.signal.aborted) {
+            return close();
+          }
+          emitter.addListener(params.lobby as string, send);
+        },
+      });
+      return new Response(stream, {
+        headers: { "Content-Type": "text/event-stream" },
       });
     }
   }
-  return json(null);
+  return json(null as Data);
 }
 
 export async function action({ params, request }: ActionArgs) {
@@ -78,7 +121,7 @@ export async function action({ params, request }: ActionArgs) {
 export default function Index() {
   const navigate = useNavigate();
   const { lobby } = useParams();
-  const user = useLoaderData<typeof loader>();
+  const user: Data = useLoaderData();
   const [sluts, setSluts] = useState(user?.sluts);
 
   useEffect(() => {
@@ -91,9 +134,12 @@ export default function Index() {
           setSluts(JSON.parse(data.data));
         }
       }
-      const eventSource = new EventSource(`/${lobby}/events`);
+      const eventSource = new EventSource(`/${lobby}?_data=routes/$lobby`);
       eventSource.addEventListener("message", handler);
-      return () => eventSource.removeEventListener("message", handler);
+      return () => {
+        eventSource.removeEventListener("message", handler);
+        eventSource.close();
+      };
     }
   }, [user, lobby, navigate]);
 

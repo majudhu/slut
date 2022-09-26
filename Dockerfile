@@ -9,16 +9,15 @@ RUN --mount=type=cache,id=node,target=/root/.node corepack enable && corepack pr
 ENV NODE_ENV production
 ENV CI 1
 ARG PNPM=/root/.local/share/pnpm/store
+WORKDIR /app
 
 # Setup production node_modules 
 FROM base as production-deps
 
-WORKDIR /app
-
-COPY --link package.json pnpm-lock.yaml ./
+COPY --link package.json pnpm-lock.yaml .
 RUN --mount=type=cache,id=pnpm,target=$PNPM pnpm install
 
-COPY --link prisma ./
+COPY --link prisma prisma
 RUN --mount=type=cache,id=pnpm,target=$PNPM pnpx prisma generate
 
 # Build the app
@@ -32,11 +31,9 @@ RUN --mount=type=cache,id=remix,target=.cache pnpm build
 # Finally, build the production image with minimal footprint
 FROM base
 
-WORKDIR /app
-
-COPY --link --from=production-deps /app/node_modules /app/node_modules
-COPY --link --from=build /app/build /app/build
-COPY --link --from=build /app/public /app/public
+COPY --link --from=production-deps /app/node_modules node_modules
+COPY --link --from=build /app/build build
+COPY --link --from=build /app/public public
 COPY --link . .
 
 CMD "./start_with_migrations.sh"

@@ -28,7 +28,7 @@ FROM production-deps as build
 RUN --mount=type=cache,id=pnpm,target=$PNPM pnpm install --production=false
 
 COPY --link . .
-RUN pnpm build
+RUN --mount=type=cache,id=remix,target=.cache pnpm build
 
 # Finally, build the production image with minimal footprint
 FROM base

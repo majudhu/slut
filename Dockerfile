@@ -13,7 +13,6 @@ ARG PNPM=/root/.local/share/pnpm/store
 # Setup production node_modules 
 FROM base as production-deps
 
-RUN mkdir /app
 WORKDIR /app
 
 COPY --link package.json pnpm-lock.yaml ./
@@ -33,7 +32,6 @@ RUN --mount=type=cache,id=remix,target=.cache pnpm build
 # Finally, build the production image with minimal footprint
 FROM base
 
-RUN mkdir /app
 WORKDIR /app
 
 COPY --link --from=production-deps /app/node_modules /app/node_modules

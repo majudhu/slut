@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+# base node image
+FROM node:lts-bullseye-slim as base
+
+ARG PNPM=/root/.local/share/pnpm/store
+ENV NODE_ENV production
+ENV CI 1
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+# Install openssl for Prisma
+RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
+    --mount=type=cache,sharing=locked,target=/var/lib/apt \
+    apt update && apt upgrade && apt install openssl
+RUN --mount=type=cache,target=/root/.node corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Setup production node_modules 
+FROM base as production-deps
+
+COPY --link package.json pnpm-lock.yaml .
+RUN --mount=type=cache,target=$PNPM pnpm install
+
+COPY --link prisma prisma
+RUN --mount=type=cache,target=$PNPM pnpx prisma generate
+
+# Build the app
+FROM production-deps as build
+
+RUN --mount=type=cache,target=$PNPM pnpm install --production=false
+
+COPY --link . .
+RUN --mount=type=cache,target=.cache pnpm build
+
+# Finally, build the production image with minimal footprint
+FROM base
+
+COPY --link --from=production-deps /app/node_modules node_modules
+COPY --link --from=build /app/build build
+COPY --link --from=build /app/public public
+COPY --link . .
+
+CMD "./start_with_migrations.sh"
